@@ -16,6 +16,7 @@ async function writeContent(fileUrl, file, title, authors) {
 
 }
 
+const MAX_ENTRIES_EXPANDED = 2000;
 let entries;
 
 async function readZip(fileUrl) {
@@ -73,10 +74,15 @@ async function readZip(fileUrl) {
                 treeObject.filename = entry.filename;
 
                 if(entry.directory) {
-                    treeObject.expanded=true;
+  
+                    treeObject.expanded = entries.length <= MAX_ENTRIES_EXPANDED;
                     entryMap[entry.filename] = treeObject;
 
                 }
+                
+                //if tree is too large, set lazy load and do not expand nodes at beginning
+                treeObject.lazy = entries.length > MAX_ENTRIES_EXPANDED;
+                
 
                 if(parentListNode) {
                     if(!parentListNode.children){
@@ -184,6 +190,11 @@ async function setProgressBarValue(val) {
     $('#modalProgressBar').css('width', val+'%').attr('aria-valuenow', val).text(val + ' %');
 }
 
+
+async function lazyLoad(event, data) {
+
+}
+
 //Create Tree
 async function createTree(dataStructure) {
     $("#treegrid").fancytree({
@@ -194,6 +205,7 @@ async function createTree(dataStructure) {
           nodeColumnIdx: 0,     // render the node title into the 1st column
         },
         source: dataStructure,
+        
 
         tooltip: function(event, data){
           return data.node.data.filename;
