@@ -74,14 +74,14 @@ async function readZip(fileUrl) {
                 treeObject.filename = entry.filename;
 
                 if(entry.directory) {
-  
+                    //if tree is too large, set lazy load and do not expand nodes at beginning
                     treeObject.expanded = entries.length <= MAX_ENTRIES_EXPANDED;
-                    entryMap[entry.filename] = treeObject;
+                    treeObject.lazy = entries.length > MAX_ENTRIES_EXPANDED;
 
+                    entryMap[entry.filename] = treeObject;
                 }
                 
-                //if tree is too large, set lazy load and do not expand nodes at beginning
-                treeObject.lazy = entries.length > MAX_ENTRIES_EXPANDED;
+             
                 
 
                 if(parentListNode) {
