@@ -13,7 +13,7 @@ For updates such as enabling Internationalization, which change the parameters y
 
 There is one command per mimetype you wish to preview (i.e. multiple commands to cover different types of images.) You can run any/all of the commands as you like. Note that the Hypothesis annotation previewer assumes a custom mimetype and may not be useful for most Dataverses (contact [QDR](mailto:qdr@syr.edu) for more information). Dataverse 4.11+ is required.
 
-Note that Dataverse installations configured to redirect to S3 storage for file downloads will need to enable CORS at the storage layer as well as the application layer (the latter is enabled by default). (See, for example, [Amazon's CORS configuration guidance](https://docs.aws.amazon.com/AmazonS3/latest/user-guide/add-cors-configuration.html)).
+Note that Dataverse installations configured to redirect to S3 storage for file downloads will need to enable CORS at the storage layer as well as the application layer (the latter is enabled by default). (See, for example, [Amazon's CORS configuration guidance](https://docs.aws.amazon.com/AmazonS3/latest/user-guide/add-cors-configuration.html)). See also the [page on CORS](https://github.com/gdcc/dataverse-previewers/wiki/Using-Previewers-with-download-redirects-from-S3) in the wiki.
 
 Also note that using the commands below means that your installation will automatically start using updated versions of the previewers when the master branch of this repository is updated. We intend to announce upcoming changes on the dataverse-community@google-groups.com mailing list, but if you do not want this behavior, you can download the previewers and host them on your own server, adjusting the curl commands below to reference your local copies.
 
@@ -71,6 +71,10 @@ The Spreadsheet Previewer was contributed by [anncie-pcss](https://github.com/an
 [juancorr](https://github.com/juancorr) added internationalization and provided a Spanish translation for the existing previewers.
 
 [kaitlinnewson](https://github.com/kaitlinnewson) provided a French translation for the existing previewers, and contributed the GeoJSON previewer.
+
+[Max Planck Digital Library](https://github.com/MPDL) contributed the ZIP Previewer.
+
+[erykkul](https://github.com/erykkul) contributed the Markdown (MD) Previewer.
 
 ## How can I help?
 

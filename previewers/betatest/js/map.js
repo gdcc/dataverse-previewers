@@ -21,7 +21,20 @@ function writeContentAndData(data, fileUrl, file, title, authors) {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    // add data to map and zoom to added features
-    var geoJson = L.geoJSON(geoJsonData).addTo(map);
+    // add data to map, including properties if set
+    var geoJson = L.geoJSON(geoJsonData, {
+        onEachFeature: function (feature, layer) {
+            if (feature.properties) {
+                var popupcontent = [];
+                for (var propName in feature.properties) {
+                    propValue = feature.properties[propName];
+                    popupcontent.push("<strong>" + propName + "</strong>: " + JSON.stringify(propValue, null, 2));
+                }
+                layer.bindPopup(popupcontent.join("<br />"));
+            }
+        }
+      }).addTo(map);
+
+    // zoom to added features
     map.fitBounds(geoJson.getBounds());
 }
