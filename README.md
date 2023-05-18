@@ -76,6 +76,8 @@ The Spreadsheet Previewer was contributed by [anncie-pcss](https://github.com/an
 
 [erykkul](https://github.com/erykkul) contributed the Markdown (MD) Previewer.
 
+[Jan Range](https://github.com/JR-1991) contributed the H5Web Previewer.
+
 ## How can I help?
 
 If you are interested in adding additional previewers, or in maintaining/enhancing existing ones, contact us at [dataverse-dev@googlegroups.com](mailto:dataverse-dev@googlegroups.com) or work through github to fork/make pull-requests against the repository.
