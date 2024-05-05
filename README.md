@@ -81,6 +81,9 @@ The Spreadsheet Previewer was contributed by [anncie-pcss](https://github.com/an
 
 [Jan Range](https://github.com/JR-1991) contributed the H5Web Previewer, Rich Html Previewer.
 
+[Paul Boon](https://github.com/PaulBoon) contributed the 3D Previewer.
+
+
 ## How can I help?
 
 If you are interested in adding additional previewers, or in maintaining/enhancing existing ones, contact us at [dataverse-dev@googlegroups.com](mailto:dataverse-dev@googlegroups.com) or work through github to fork/make pull-requests against the repository.
@@ -94,8 +97,7 @@ By committing code to the repository, Contributors are agreeing to make it avail
 ## Example Curl commands to configure these tools with your Dataverse instance. 
 The examples configure Previewers from the specified location within https://github.io/gdcc/ corresponding to a given branch. To use older versions or locally installed versions of the previewers, you can change the "toolUrl" being used.
 
-
-Previewers v1.4 (with betatest versions of newer previewers as noted)
+Previewers v1.4 (with betatest versions of newer previewers as noted, e.g. 3D Previewer)
 - [Dataverse 6.1+](6.1curlcommands.md) - using SignedUrls
 - [Dataverse 5.2+](5.2curlcommands.md) - using API tokens, not recommended beyond Dataverse 6.0
 
