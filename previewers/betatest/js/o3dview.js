@@ -63,7 +63,17 @@ function writeContentAndData(data, fileUrl, file, title, authors) {
     //viewer.LoadModelFromFileList([dataFile]);
 
     // TODO fix problem with the filename, only have it in 'Open In New Window' link
-    const dataFile = new File([data], file.filename);
+    filename = "";
+    if (file.hasOwnProperty("filename")) {
+        console.log("File has filename: " + file.filename);
+        filename = file.filename;
+    } else {
+        console.log("File has no filename, try extracting it from the page");
+        // Note that we are in an iframe, so we need to get the filename from the parent
+        filename = window.parent.$(".file-title-label").text();
+        console.log("filename: " + filename);
+    }
+    const dataFile = new File([data], filename);
     viewer.LoadModelFromFileList([dataFile]);
 
     // TODO, force to view whole object if possible?
