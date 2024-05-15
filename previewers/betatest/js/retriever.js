@@ -229,10 +229,8 @@ function addStandardPreviewHeader(file, title, authors) {
 
         // Add logo from source Dataverse or use a local one, unless we are in preview mode
         $('#logo')
-            .attr('src', queryParams.siteUrl + '/logos/preview_logo.png')
-            .attr(
-                'onerror',
-                'this.onerror=null;this.src="images/logo_placeholder.png";');
+            .attr('src', queryParams.siteUrl + '/logos/preview_logo.svg')
+            .attr('onerror', "handleImageError(this)");
     }
     //Footer
     var footer = $.i18n("footer");
@@ -304,4 +302,18 @@ function reportFailure(msg, statusCode) {
         .text(msg
             + errorText
             + statusCode);
+}
+
+function handleImageError(image) {
+    let currentFallback = parseInt(image.getAttribute('data-fallback-index') || '0');
+
+    if(currentFallback == 0){
+        image.src = queryParams.siteUrl + '/logos/preview_logo.png';
+        image.dataset.fallbackIndex = 1;
+    }
+    else{
+        image.src = 'images/logo_placeholder.png';
+        image.onerror = null;
+    }
+
 }
