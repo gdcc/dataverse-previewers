@@ -10,6 +10,7 @@ function translateBaseHtmlPage() {
 function writeContentAndData(data, fileUrl, file, title, authors) {
     addStandardPreviewHeader(file, title, authors);
     const converter = new showdown.Converter();
+    converter.setOption('tables', true);
     const html = converter.makeHtml(data);
     $('.preview').append($("<div/>").html(html));
 }
