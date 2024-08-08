@@ -72,7 +72,8 @@ The image previewer only works with image/tiff files on some browsers (as of ~Ja
 
 The original tools were developed through the [Qualitative Data Repository](https://qdr.syr.edu) but are being offered to the Dataverse community at large.
 
-[qqmyers](https://github.com/qqmyers) - developer of the original previewer framework, contributions to the Rich Html Previewer 
+[qqmyers](https://github.com/qqmyers) - developer of the original previewer framework, contributions to the Rich Html Previewer, Voyager Previewer, updating to use signed URLs
+
 The Spreadsheet Previewer was contributed by [anncie-pcss](https://github.com/anncie-pcss).
 
 [pdurbin](https://github.com/pdurbin) updated the retriever.js script to allow previewers to be embedded directly in the Dataverse file pages.
