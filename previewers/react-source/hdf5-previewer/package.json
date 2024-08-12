@@ -21,8 +21,8 @@
     "lint:tsc": "tsc"
   },
   "dependencies": {
-    "@h5web/app": "7.x",
-    "@h5web/h5wasm": "7.x",
+    "@h5web/app": "12.x",
+    "@h5web/h5wasm": "12.x",
     "axios": "1.6.0",
     "axios-hooks": "4.0.0",
     "normalize.css": "8.0.1",
