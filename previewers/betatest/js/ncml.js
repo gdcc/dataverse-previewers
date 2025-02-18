@@ -10,11 +10,11 @@ function translateBaseHtmlPage() {
 function writeContent(fileUrl, file, title, authors) {
     addStandardPreviewHeader(file, title, authors);
     var apiTokenOptional = "";
-    var apiToken = queryParams.get("key");
+    var apiToken = queryParams.key;
     if (apiToken != null) {
         apiTokenOptional = "?key=" + apiToken;
     }
-    var ncmlUrl = queryParams.get("siteUrl") + "/api/access/datafile/" + queryParams.get("fileid") + "/auxiliary/NcML/0.1" + apiTokenOptional;
+    var ncmlUrl = queryParams.siteUrl + "/api/access/datafile/" + queryParams.fileid + "/auxiliary/NcML/0.1" + apiTokenOptional;
     // copied from text.js
     var whiteList = {
         a: ["title"],
