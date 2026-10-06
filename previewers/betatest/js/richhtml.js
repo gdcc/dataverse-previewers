@@ -26,12 +26,12 @@ function writeContentAndData(data, fileUrl, file, title, authors) {
         subheader = $('<div/>').appendTo(header).addClass('center');
         subheader.append($("<div/>").addClass("btn btn-default")
              .html($('<a/>').html( $.i18n('displayWithRichContent'))
-                 .click(function(){console.log('Click');$('.preview').html(theData);})
+                 .click(function(){console.log('Click');$('.preview').html(theData);header.remove();})
              )
         );
         subheader.append($("<div/>").addClass("btn btn-default")
              .html($('<a/>').html( $.i18n('displayWithoutRichContent'))
-                 .click(function(){console.log('Click');$('.preview').html(filterXSS(theData,options));})
+                 .click(function(){console.log('Click');$('.preview').html(filterXSS(theData,options));header.remove();})
              )
         );
     } else {

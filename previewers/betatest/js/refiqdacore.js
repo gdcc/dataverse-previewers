@@ -1,17 +1,19 @@
+/* global $, jQuery, DataTable, cytoscape, tippy, zip, fetchTextExcerpt, resolveInternalZipPaths, createAndUploadRedactedZip, queryParams */
 
 var userMap = new Map();
 var codeMap = new Map();
 var sourceMap = new Map();
 var noteMap = new Map();
 var tableWidth = '90%';
-var selectedGUIDs = new Array();
+var selectedGUIDs = [];
 var noteDataTable;
 var userDataTable;
 var codeDataTable;
 var sourceDataTable;
 var setDataTable;
-var tables = new Array();
+var tables = [];
 
+let file;
 var textSourceCache = new Map(); // Cache for loaded text files
 
 $(document).ready(function() {
@@ -21,44 +23,10 @@ $(document).ready(function() {
 function translateBaseHtmlPage() {
   var refiqdaPreviewText = $.i18n("refiqdaPreviewText");
   $('.refiqdaPreviewText').text(refiqdaPreviewText);
-}
-
-function addSelectAllAndUnselectButtons(dataTable, tableContainer, tableId) {
-  // Add "Unselect All" button next to the table title
-  const unselectAllButton = $('<button>Unselect All</button>')
-    .addClass('unselect-all-btn')
-    .hide()
-    .on('click', function() {
-      dataTable.rows({ selected: true }).deselect();
-    });
-  tableContainer.find('h2').first().append(unselectAllButton);
-
-  // Add "Select All" checkbox to the table header
-  const selectAllCheckbox = $('<input type="checkbox" title="Select all rows in this table" />');
-  $('#' + tableId + ' thead tr').prepend($('<th class="select-all">').append(selectAllCheckbox));
-  $('#' + tableId + ' tbody tr').prepend($('<td class="select-all">')); // Placeholder for alignment
-
-  selectAllCheckbox.on('click', function() {
-    if (this.checked) {
-      dataTable.rows().select();
-    } else {
-      dataTable.rows().deselect();
-    }
-  });
-
-  // Show/hide "Unselect All" button and manage "Select All" checkbox state
-  dataTable.on('select deselect', function() {
-    const selectedRows = dataTable.rows({ selected: true }).count();
-    const totalRows = dataTable.rows().count();
-
-    if (selectedRows > 0) {
-      unselectAllButton.show();
-    } else {
-      unselectAllButton.hide();
-    }
-
-    selectAllCheckbox.prop('checked', selectedRows === totalRows);
-  });
+  var refiqdpxPreviewText = $.i18n("refiqdpxPreviewText");
+  $('.refiqdpxPreviewText').text(refiqdpxPreviewText);
+  var refiqdcPreviewText = $.i18n("refiqdcPreviewText");
+  $('.refiqdcPreviewText').text(refiqdcPreviewText);
 }
 
 var zipUrl = '';
@@ -68,30 +36,63 @@ function isZipMode() {
     return typeof zipUrl !== 'undefined' && zipUrl !== null && zipUrl !== '';
 }
 
+var redactedMode;
+var canRedact = false;
+var redactedFileExists = false;
+
+async function checkPermissions() {
+    let permissionsUrl = queryParams.signedUrls ? queryParams.signedUrls.userPermissions : null;
+    if (!permissionsUrl && queryParams.siteUrl && queryParams.datasetid) {
+        permissionsUrl = queryParams.siteUrl + "/api/datasets/" + queryParams.datasetid + "/userPermissions";
+        if (queryParams.key) {
+            permissionsUrl += (permissionsUrl.includes('?') ? '&' : '?') + "key=" + queryParams.key;
+        }
+    }
+    if (permissionsUrl) {
+        try {
+            const response = await fetch(permissionsUrl);
+            if (response.ok) {
+                const json = await response.json();
+                if (json.status === 'OK' && json.data && json.data.canEditDataset) {
+                    canRedact = true;
+                }
+            }
+        } catch (error) {
+            console.error("Error checking permissions:", error);
+        }
+    }
+}
+
 var wait;
 var cy;
 
+function showWaitingIndicator(messageKey, isRawMessage) {
+  $('#waiting').remove();
+  wait = $('<div/>').attr('id', 'waiting');
+  $('<img alt="Loading"/>').attr('src', 'images/Loading_icon.gif').appendTo(wait);
+  let message = isRawMessage ? messageKey : $.i18n(messageKey);
+  $('<span/>').text(message).appendTo(wait);
+  wait.appendTo($('body'));
+}
 
-
-
-function findDataAttribute(name, attrNamedNodeMap) {
-  let attr = attrNamedNodeMap[name];
-  if (typeof attr !== 'undefined') {
-    return attr.nodeValue;
-  }
-  return '';
+function hideWaitingIndicator() {
+  $('#waiting').remove();
 }
 
 // Start parsing project file
 // This function just adds a loading icon and initial text to the page and then calls parseData2
-function parseData(data) {
-  $('#waiting').remove();
-  wait = $('<div/>').attr('id', 'waiting');
-  $('<img/>').width('15%').attr('src', 'images/Loading_icon.gif').appendTo(wait);
-    $('<span/>').text('Found Project File. Parsing Contents...').appendTo(wait);
-  wait.appendTo($('.preview'));
+function parseData(data, filejson) {
+  file=filejson;
+  showWaitingIndicator('refiqdaParsingProject');
 
-  new Promise((resolve) => setTimeout(resolve, 500)).then(() => { parseData2(data) });
+    checkPermissions().then(() => {
+    new Promise((resolve) => setTimeout(resolve, 500)).then(() => {
+        parseData2(data);
+        if (canRedact && !redactedMode) {
+            checkForRedactedFile();
+        }
+    });
+  });
 }
 
 // Reads the project file and walks through the XML creating tables for all the entry types
@@ -101,24 +102,36 @@ function parseData2(data) {
   parser = new DOMParser();
   xmlDoc = parser.parseFromString(data, "text/xml");
 
-
+  if(redactedMode) {
+      $('<h2/>').addClass('redacted-notice').text($.i18n('refiqdaRedactedNotice')).appendTo($(".preview"));
+  }
     //Add a Filter By option
-  let filterBlock = $('<div/>').width(tableWidth).appendTo($(".preview"));
-  filterBlock.append($("<h2/>").html("Enable Filtering By"));
-  filterBlock.append($("<p/>").html("Select a table and then select entries in that table to filter the other tables."));
-  filterBlock.append($('<select/>').prop('id', 'filterby'));
-  $('#filterby').append($('<option/>').prop('value', 'None').text('No Filtering'));
+  const preview = $('.preview');
+  let filterBlock = $('<div/>').width(tableWidth).appendTo(preview);
+  filterBlock.append($("<h2/>").html($.i18n('refiqdaEnableFilteringBy')));
+  filterBlock.append($("<p/>").html($.i18n('refiqdaFilteringInstructions')));
+  const filterBy = $('<select/>').prop('id', 'filterby').appendTo(filterBlock);
+  if (canRedact && !redactedMode) {
+      $('<button/>')
+          .addClass('btn btn-danger delete-redacted-btn')
+          .text($.i18n('refiqdaDeleteRedacted'))
+          .css('margin-left', '10px')
+          .hide()
+          .click(deleteRedactedFile)
+          .appendTo(filterBlock);
+  }
+  filterBy.append($('<option/>').prop('value', 'None').text($.i18n('refiqdaNoFiltering')));
   //As tables are created, they will be added to the option list here
 
   //User table
   var users = xmlDoc.getElementsByTagName("User");
   if (users != null && users.length > 0) {
-    $('#filterby').append($('<option/>').prop('value', 'Users').text('Users'));
+      filterBy.append($('<option/>').prop('value', 'Users').text($.i18n('refiqdaUsers')));
 
-    let userBlock = $('<div/>').width(tableWidth).appendTo($(".preview"));
-    userBlock.append($("<h2>").html("Users"));
+    let userBlock = $('<div/>').width(tableWidth).appendTo(preview);
+    userBlock.append($("<h2>").html($.i18n('refiqdaUsers')));
     //Users only has a "Name" column
-    let userTable = createTable("Users", "Name").appendTo(userBlock);
+    let userTable = createTable($.i18n('refiqdaUsers'), $.i18n('refiqdaName')).appendTo(userBlock);
     userTable.attr('id', 'usertable');
     userTable.addClass("usertable compact stripe");
 
@@ -133,7 +146,7 @@ function parseData2(data) {
 
     userDataTable = new DataTable(".usertable", {
       //Allow table rows to be selectable if this is the filter by table
-      select: $('#filterby').val() == 'Users',
+      select: $('#filterby').val() === 'Users',
       order: [[0, 'asc']]
     });
     //Draw to set order
@@ -144,7 +157,7 @@ function parseData2(data) {
   console.log("Starting codes");
   var codes = xmlDoc.getElementsByTagName("Code");
   if (codes != null  && codes.length > 0) {
-    $('#filterby').append($('<option/>').prop('value', 'Codes').text('Codes'));
+      filterBy.append($('<option/>').prop('value', 'Codes').text($.i18n('refiqdaCodes')));
 
     // Check if any codes have a color attribute
     let hasColorAttribute = false;
@@ -166,13 +179,13 @@ function parseData2(data) {
     }
 
     let codeBlock = $('<div/>').width(tableWidth).appendTo($(".preview"));
-    codeBlock.append($("<h2/>").html("Codes"));
+    codeBlock.append($("<h2/>").html($.i18n('refiqdaCodes')));
     // Create table with or without Color column based on whether color attributes exist
     let codeTable;
     if (hasColorAttribute) {
-      codeTable = createTable("Codes", "Code", "Description", "Color", "Codable", "# of Uses").appendTo(codeBlock);
+      codeTable = createTable($.i18n('refiqdaCodes'), $.i18n('refiqdaCode'), $.i18n('refiqdaDescription'), $.i18n('refiqdaColor'), $.i18n('refiqdaCodable'), $.i18n('refiqdaUses')).appendTo(codeBlock);
     } else {
-      codeTable = createTable("Codes", "Code", "Description", "Codable", "# of Uses").appendTo(codeBlock);
+      codeTable = createTable($.i18n('refiqdaCodes'), $.i18n('refiqdaCode'), $.i18n('refiqdaDescription'), $.i18n('refiqdaCodable'), $.i18n('refiqdaUses')).appendTo(codeBlock);
     }
     codeTable.attr('id', 'codetable');
     codeTable.addClass("codetable compact stripe");
@@ -206,8 +219,34 @@ function parseData2(data) {
 
     // Configure DataTable with conditional columnDefs
     let dataTableConfig = {
-        select: $('#filterby').val() == 'Codes'
+        select: filterBy.val() === 'Codes'
     };
+
+    if (filterBy.val() === 'Codes') {
+        dataTableConfig.layout = {
+            top2End: 'buttons'
+        };
+        dataTableConfig.buttons = [
+            'selectAll',
+            'selectNone'
+        ];
+        if (canRedact) {
+            dataTableConfig.buttons.push({
+                text: $.i18n('refiqdaRedact'),
+                className: 'redact-btn',
+                titleAttr: $.i18n('refiqdaRedactCodeTooltip'),
+                action: function ( e, dt, node, config ) {
+                    let selectedRows = dt.rows( { selected: true } );
+                    let codeGuids = [];
+                    selectedRows.nodes().to$().each(function() {
+                        codeGuids.push($(this).data('guid'));
+                    });
+                    redactCodes(codeGuids);
+                },
+                enabled: false
+            });
+        }
+    }
 
     if (hasColorAttribute) {
         dataTableConfig.columnDefs = [
@@ -264,6 +303,15 @@ function parseData2(data) {
     dataTableConfig.order = [[usesColumnIndex, "desc"]];
     codeDataTable = new DataTable(".codetable", dataTableConfig);
 
+    if (filterBy.val() === 'Codes') {
+        codeDataTable.on('select deselect', function () {
+            var selectedRows = codeDataTable.rows({ selected: true }).count();
+            if (canRedact) {
+                codeDataTable.button('.redact-btn').enable(selectedRows > 0);
+            }
+        });
+    }
+
     tables.push(codeDataTable);
   }
 
@@ -283,7 +331,7 @@ function parseData2(data) {
           let sourceMatches = source.getAttribute("creatingUser") + source.getAttribute("modifyingUser");
           let selections = getSelections(source);
 
-          if (selections != null && selections.length != 0) {
+          if (selections != null && selections.length !== 0) {
             selections.forEach(function(selection) {
               let displayName;
               let selectionMatches;
@@ -295,8 +343,9 @@ function parseData2(data) {
                 let pdfSel = selection.pdfSelection;
                 let textSel = selection.plainTextSelection;
                 let selectionName = pdfSel.getAttribute("name");
+
                 if(!selectionName) {
-                  selectionName = "(Hover for more info)";
+                   selectionName = "(Hover for more info)";
                 }
                 guid = pdfSel.getAttribute("guid");
                 codes = getCodeNames(pdfSel); // Codes are on the PDF selection
@@ -319,7 +368,6 @@ function parseData2(data) {
                 guid = selection.getAttribute("guid");
                 codes = getCodeNames(selection);
                 let sourceGuid = source.getAttribute("guid");
-                
                 selectionMatches = sourceMatches + selection.getAttribute("creatingUser") + selection.getAttribute("modifyingUser") + getCodeRelatedGUIDs(selection) + sourceGuid;
 
                 displayName = selectionName; // Default display name
@@ -342,7 +390,7 @@ function parseData2(data) {
               }
 
               annotationRows.push({
-                sourceRef: createSourceReference(source, zipUrl),
+                sourceRef: createSourceReference(source),
                 type: source.nodeName,
                 name: displayName,
                 codes: codes,
@@ -354,9 +402,9 @@ function parseData2(data) {
 
           // Add whole document entry to sources
           sourceRows.push({
-            sourceRef: createSourceReference(source, zipUrl),
+            sourceRef: createSourceReference(source),
             type: source.nodeName,
-            name: "Whole Document",
+            name: $.i18n('refiqdaWholeDocument'),
             codes: "",
             guid: source.getAttribute("guid"),
             matches: sourceMatches
@@ -367,11 +415,11 @@ function parseData2(data) {
 
       // Create Annotations table if there are any annotations
       if (annotationRows.length > 0) {
-          $('#filterby').append($('<option/>').prop('value', 'Annotations').text('Annotations'));
+          filterBy.append($('<option/>').prop('value', 'Annotations').text($.i18n('refiqdaAnnotations')));
 
           let annotationBlock = $('<div/>').width(tableWidth).appendTo($(".preview"));
-          annotationBlock.append($("<h2/>").html("Annotations"));
-          let annotationTable = createTable("Annotations", "Filename", "Type", "Selection", "Codes").appendTo(annotationBlock);
+          annotationBlock.append($("<h2/>").html($.i18n('refiqdaAnnotations')));
+          let annotationTable = createTable($.i18n('refiqdaAnnotations'), $.i18n('refiqdaFilename'), $.i18n('refiqdaType'), $.i18n('refiqdaSelection'), $.i18n('refiqdaCodes')).appendTo(annotationBlock);
           annotationTable.addClass("annotationtable compact stripe");
 
           annotationRows.forEach(function(rowData) {
@@ -381,32 +429,22 @@ function parseData2(data) {
           });
 
           var annotationDataTable = new DataTable(".annotationtable", {
-              select: $('#filterby').val() == 'Annotations'
+              select: filterBy.val() === 'Annotations'
           });
 
           // Initialize tooltips after table is created (ONLY for annotations table)
           initializeExcerptTooltips();
-
-          if (typeof downloadFile === 'function') {
-              $("a[data-entry-index]").click(downloadFile);
-              $('.annotationtable').on('draw.dt', function() {
-                  $("a[data-entry-index]").off('click');
-                  $("a[data-entry-index]").click(downloadFile);
-                  // Reinitialize tooltips after redraw (ONLY for annotations)
-                  initializeExcerptTooltips();
-              });
-          }
 
           tables.push(annotationDataTable);
       }
 
       // Create Sources table if there are any sources
       if (sourceRows.length > 0) {
-        $('#filterby').append($('<option/>').prop('value', 'Sources').text('Sources'));
+        filterBy.append($('<option/>').prop('value', 'Sources').text($.i18n('refiqdaSources')));
 
         let sourceBlock = $('<div/>').width(tableWidth).appendTo($(".preview"));
-        sourceBlock.append($("<h2/>").html("Sources"));
-        let sourceTable = createTable("Sources", "Filename", "Type", "Selection", "Codes").appendTo(sourceBlock);
+        sourceBlock.append($("<h2/>").html($.i18n('refiqdaSources')));
+        let sourceTable = createTable($.i18n('refiqdaSources'), $.i18n('refiqdaFilename'), $.i18n('refiqdaType'), $.i18n('refiqdaSelection'), $.i18n('refiqdaCodes')).appendTo(sourceBlock);
         sourceTable.addClass("sourcetable compact stripe");
 
         sourceRows.forEach(function(rowData) {
@@ -416,16 +454,20 @@ function parseData2(data) {
         });
 
         sourceDataTable = new DataTable(".sourcetable", {
-          select: $('#filterby').val() == 'Sources'
+          select: filterBy.val() === 'Sources',
+          order: [[0, 'asc']],
+          columnDefs: [
+            {
+              render: function(data, type, row) {
+                if (type === 'display' && data !== null && data.length > 50) {
+                  return '<span title="' + data + '">' + data.substring(0, 50) + '...</span>';
+                }
+                return data;
+              },
+              targets: 1
+            }
+          ]
         });
-
-        if (typeof downloadFile === 'function') {
-          $("a[data-entry-index]").click(downloadFile);
-          $('.sourcetable').on('draw.dt', function() {
-            $("a[data-entry-index]").off('click');
-            $("a[data-entry-index]").click(downloadFile);
-          });
-        }
 
         tables.push(sourceDataTable);
       }
@@ -437,10 +479,10 @@ function parseData2(data) {
   var notes = xmlDoc.getElementsByTagName("Note");
 
   if (notes != null && notes.length > 0) {
-    $('#filterby').append($('<option/>').prop('value', 'Notes').text('Notes'));
+    filterBy.append($('<option/>').prop('value', 'Notes').text($.i18n('refiqdaNotes')));
     let noteBlock = $('<div/>').width(tableWidth).appendTo($(".preview"));
-    noteBlock.append($("<h2/>").html("Notes"));
-    let noteTable = createTable("Notes", "Name", "Content", "Description", "Authors").appendTo(noteBlock);
+    noteBlock.append($("<h2/>").html($.i18n('refiqdaNotes')));
+    let noteTable = createTable($.i18n('refiqdaNotes'), $.i18n('refiqdaName'), $.i18n('refiqdaContent'), $.i18n('refiqdaDescription'), $.i18n('refiqdaAuthors')).appendTo(noteBlock);
     noteTable.addClass("notetable compact stripe");
 
     for (let note of notes) {
@@ -484,7 +526,7 @@ function parseData2(data) {
     }
 
     noteDataTable = new DataTable(".notetable", {
-      select: $('#filterby').val() == 'Notes'
+      select: filterBy.val() === 'Notes'
       //columnDefs:[{target:0,visible:false,seachable:false}]
     });
     tables.push(noteDataTable);
@@ -495,7 +537,7 @@ function parseData2(data) {
 
   if (variables.length > 0 && cases.length > 0) {
     let variableMap = new Map();
-    let variableHeaders = ["Source"]; // First column is the source document
+    let variableHeaders = [$.i18n('refiqdaSource')]; // First column is the source document
 
     for (let variable of variables) {
       let guid = variable.getAttribute("guid");
@@ -506,8 +548,8 @@ function parseData2(data) {
     }
 
     let caseBlock = $('<div/>').width(tableWidth).appendTo($(".preview"));
-    caseBlock.append($("<h2/>").html("Cases"));
-    let caseTable = createTable("Cases", ...variableHeaders).appendTo(caseBlock);
+    caseBlock.append($("<h2/>").html($.i18n('refiqdaCases')));
+    let caseTable = createTable($.i18n('refiqdaCases'), ...variableHeaders).appendTo(caseBlock);
     caseTable.addClass("casetable compact stripe");
 
     for (let caseNode of cases) {
@@ -519,7 +561,7 @@ function parseData2(data) {
         let sourceGuid = sourceRef.getAttribute("targetGUID");
         let source = sourceMap.get(sourceGuid);
         if (source) {
-          rowData[0] = createSourceReference(source, zipUrl);
+          rowData[0] = createSourceReference(source);
         }
       }
 
@@ -548,10 +590,10 @@ function parseData2(data) {
  
   let sets = xmlDoc.getElementsByTagName("Set");
   if (sets != null && sets.length > 0) {
-    $('#filterby').append($('<option/>').prop('value', 'Sets').text('Sets'));
+    filterBy.append($('<option/>').prop('value', 'Sets').text($.i18n('refiqdaSets')));
     let setBlock = $('<div/>').width(tableWidth).appendTo($(".preview"));
-    setBlock.append($("<h2/>").html("Sets"));
-    let setTable = createTable("Sets", "Name", "Sources", "Codes").appendTo(setBlock);
+    setBlock.append($("<h2/>").html($.i18n('refiqdaSets')));
+    let setTable = createTable($.i18n('refiqdaSets'), $.i18n('refiqdaName'), $.i18n('refiqdaSources'), $.i18n('refiqdaCodes')).appendTo(setBlock);
     setTable.addClass("settable compact stripe");
 
     for (let set of sets) {
@@ -585,7 +627,7 @@ function parseData2(data) {
         tr.attr('data-guid', set.getAttribute('guid'));
     }
     setDataTable = new DataTable(".settable", {
-      select: $('#filterby').val() == 'Sets'
+      select: filterBy.val() === 'Sets'
     });
     tables.push(setDataTable);
   }
@@ -593,30 +635,30 @@ function parseData2(data) {
     let graphs = xmlDoc.getElementsByTagName("Graph");
     if (graphs != null && graphs.length > 0) {
       let graphBlock = $('<div/>').width(tableWidth).appendTo($(".preview"));
-      graphBlock.append($("<h2/>").html("Graphs").append($('<span/>').attr('id', 'reset').text('Reset').addClass('btn btn-default')));
+      graphBlock.append($("<h2/>").html($.i18n('refiqdaGraphs')).append($('<span/>').attr('id', 'reset').text($.i18n('refiqdaReset')).addClass('btn btn-default')));
 
       let elements = [];
       for (let graph of graphs) {
           let vertexes = graph.getElementsByTagName("Vertex");
           for (let vertex of vertexes) {
-            var data = {};
-            data.id = vertex.getAttribute("guid");
-            data.name = vertex.getAttribute("name");
-            var gnode = {};
+            var vertData = {};
+            vertData.id = vertex.getAttribute("guid");
+            vertData.name = vertex.getAttribute("name");
+            var vertGnode = {};
 
-            gnode.data = data;
-            elements.push(gnode);
+            edgeGnode.data = vertData;
+            elements.push(vertGnode);
           }
           let edges = graph.getElementsByTagName("Edge");
           for (let edge of edges) {
-            var data = {};
-            data.id = edge.getAttribute("guid");
-            data.name = "";
-            data.source = edge.getAttribute("sourceVertex");
-            data.target = edge.getAttribute("targetVertex");
-            var gnode = {};
-            gnode.data = data;
-            elements.push(gnode);
+            var edgeData = {};
+            edgeData.id = edge.getAttribute("guid");
+            edgeData.name = "";
+            edgeData.source = edge.getAttribute("sourceVertex");
+            edgeData.target = edge.getAttribute("targetVertex");
+            var edgeGnode = {};
+            edgeGnode.data = edgeData;
+            elements.push(edgeGnode);
           }
       }
       let cyContainer = $('<div/>').width("100%").height("400px").attr('id', 'cy').appendTo(graphBlock);
@@ -664,17 +706,17 @@ $("#filterby")
 
       // Clear selections when changing filter
       selectedGUIDs = [];
-        tables=new Array();
-
+        tables=[];
+      const userTable = $(".usertable");
       // Destroy and recreate userDataTable
       if (userDataTable) {
         userDataTable.destroy();
         //Also remove event handlers
-        $(".usertable").off('select.dt deselect.dt');
+        userTable.off('select.dt deselect.dt');
       }
-      if ($(".usertable").length) {
+      if (userTable.length) {
         userDataTable = new DataTable(".usertable", {
-          select: $('#filterby').val() == 'Users',
+          select: filterBy.val() === 'Users',
           order: [[0, 'asc']]
         });
         attachFilterHandler(userDataTable);
@@ -685,17 +727,45 @@ $("#filterby")
 
       // Destroy and recreate codeDataTable
       let codeTableOrder;
+      const codeTable = $(".codetable");
       if (codeDataTable) {
       codeTableOrder = codeDataTable.order();
         codeDataTable.destroy();
-        $(".codetable").off('select.dt deselect.dt');
+        codeTable.off('select.dt deselect.dt');
       }
-      if ($(".codetable").length) {
+      if (codeTable.length) {
         // Need to check if color column exists before recreating the table
         let hasColorColumn = $('.codetable thead th').length === 5; // 5 columns means Color is present plus # of Uses
         let codeConfig = {
-          select: $('#filterby').val() == 'Codes'
+          select: filterBy.val() === 'Codes'
         };
+
+        if (filterBy.val() === 'Codes') {
+            codeConfig.layout = {
+                top2End: 'buttons'
+            };
+            codeConfig.buttons = [
+                'selectAll',
+                'selectNone'
+            ];
+            if (canRedact) {
+                codeConfig.buttons.push({
+                    text: $.i18n('refiqdaRedact'),
+                    className: 'redact-btn',
+                    titleAttr: $.i18n('refiqdaRedactCodeTooltip'),
+                    action: function ( e, dt, node, config ) {
+                        let selectedRows = dt.rows( { selected: true } );
+                        let codeGuids = [];
+                        selectedRows.nodes().to$().each(function() {
+                            codeGuids.push($(this).data('guid'));
+                        });
+                        redactCodes(codeGuids);
+                    },
+                    enabled: false
+                });
+            }
+        }
+
         if (hasColorColumn) {
           codeConfig.columnDefs = [
             {
@@ -752,33 +822,96 @@ $("#filterby")
             codeConfig.order = [[usesColumnIndex, "desc"]];
         }
         codeDataTable = new DataTable(".codetable", codeConfig);
+
+        if ($('#filterby').val() === 'Codes') {
+            codeDataTable.on('select deselect', function () {
+                var selectedRows = codeDataTable.rows({ selected: true }).count();
+                if (canRedact) {
+                    codeDataTable.button('.redact-btn').enable(selectedRows > 0);
+                }
+            });
+        }
+
         attachFilterHandler(codeDataTable);
         codeDataTable.draw();
         tables.push(codeDataTable);
       }
 
       // Destroy and recreate sourceDataTable
+        const sourceTable = $(".sourcetable");
       if (sourceDataTable) {
         sourceDataTable.destroy();
-        $(".sourcetable").off('select.dt deselect.dt');
+        sourceTable.off('select.dt deselect.dt');
       }
-      if ($(".sourcetable").length) {
-        sourceDataTable = new DataTable(".sourcetable", {
-          select: $('#filterby').val() == 'Sources'
-        });
+      if (sourceTable.length) {
+        let dtOptions = {
+          select: filterBy.val() === 'Sources',
+          columnDefs: [
+            {
+              render: function(data, type, row) {
+                if (type === 'display' && data !== null && data.length > 50) {
+                  return '<span title="' + data + '">' + data.substr(0, 50) + '...</span>';
+                }
+                return data;
+              },
+              targets: 1
+            }
+          ]
+
+        };
+
+        if (filterBy.val() === 'Sources') {
+          dtOptions.layout = {
+            top2End: 'buttons'
+          };
+          dtOptions.buttons = [
+            'selectAll',
+            'selectNone'
+          ];
+          if (canRedact) {
+              dtOptions.buttons.push({
+                  text: $.i18n('refiqdaRedact'),
+                  className: 'redact-btn',
+                  titleAttr: $.i18n('refiqdaRedactSourceTooltip'),
+                  action: function ( e, dt, node, config ) {
+                      let selectedRows = dt.rows( { selected: true } );
+                      let sourceGuids = [];
+                      selectedRows.nodes().to$().each(function() {
+                          sourceGuids.push($(this).data('guid'));
+                      });
+                      redactSources(sourceGuids);
+                  },
+                  enabled: false
+              });
+          }
+        }
+
+        sourceDataTable = new DataTable(".sourcetable", dtOptions);
+
+        if (filterBy.val() === 'Sources') {
+            sourceDataTable.on('select deselect', function () {
+                var selectedRows = sourceDataTable.rows({ selected: true }).count();
+                if (canRedact) {
+                    sourceDataTable.button('.redact-btn').enable(selectedRows > 0);
+                }
+            });
+        }
+
         attachFilterHandler(sourceDataTable);
         sourceDataTable.draw();
+
         tables.push(sourceDataTable);
       }
 
       // Destroy and recreate annotationDataTable
+      const annotationTable = $(".annotationtable");
       if (annotationDataTable) {
         annotationDataTable.destroy();
-        $(".annotationtable").off('select.dt deselect.dt');
+        annotationTable.off('select.dt deselect.dt');
       }
-      if ($(".annotationtable").length) {
+      if (annotationTable.length) {
         annotationDataTable = new DataTable(".annotationtable", {
-          select: $('#filterby').val() == 'Annotations'
+          select: filterBy.val() === 'Annotations'
         });
         attachFilterHandler(annotationDataTable);
         annotationDataTable.draw();
@@ -786,13 +919,14 @@ $("#filterby")
       }
 
       // Destroy and recreate noteDataTable
+      const noteTable = $(".notetable");
       if (noteDataTable) {
         noteDataTable.destroy();
-        $(".notetable").off('select.dt deselect.dt');
+        noteTable.off('select.dt deselect.dt');
       }
-      if ($(".notetable").length) {
+      if (noteTable.length) {
         noteDataTable = new DataTable(".notetable", {
-          select: $('#filterby').val() == 'Notes'
+          select: filterBy.val() === 'Notes'
         });
         attachFilterHandler(noteDataTable);
         noteDataTable.draw();
@@ -800,13 +934,14 @@ $("#filterby")
       }
 
       // Destroy and recreate setDataTable
+        const setTable = $(".settable");
       if (setDataTable) {
         setDataTable.destroy();
-        $(".settable").off('select.dt deselect.dt');
+        setTable.off('select.dt deselect.dt');
       }
-      if ($(".settable").length) {
+      if (setTable.length) {
         setDataTable = new DataTable(".settable", {
-          select: $('#filterby').val() == 'Sets'
+          select: filterBy.val() === 'Sets'
         });
         attachFilterHandler(setDataTable);
         setDataTable.draw();
@@ -816,7 +951,7 @@ $("#filterby")
   });
 
 
-  $('#waiting').remove();
+  hideWaitingIndicator();
 }
 
 function createTable() {
@@ -826,16 +961,22 @@ function createTable() {
   for (var i = 1; i < arguments.length; i++) {
     tr.append($("<th/>").text(arguments[i]));
   }
-  let tableBody = $("<tbody/>").appendTo(table);
+  $("<tbody/>").appendTo(table);
   return table;
 }
-
+/**
+ * Adds a table row and returns it as a jQuery object.
+ *
+ * @param {jQuery} table
+ * @param {...*} values
+ * @returns {jQuery}
+ */
 function addRow(table, ...values) {
   let tr = $('<tr/>');
   values.forEach(function(value) {
     let td = $('<td/>');
-    // Check if value is a jQuery object
-    if (value instanceof jQuery) {
+    // Check if value is a jQuery object or a DOM element
+    if (value instanceof jQuery || (typeof HTMLElement !== 'undefined' && value instanceof HTMLElement)) {
       td.append(value);
     } else {
       td.html(value || '');
@@ -851,7 +992,7 @@ function attachFilterHandler(dataTable) {
   //When selections are made, update the array of selected GUIDs and redraw other tables so they get filtered.
   dataTable.on('select deselect', function(e, dt, type, indexes) {
     if (type === 'row') {
-      selectedGUIDs = new Array();
+      selectedGUIDs = [];
       dataTable.rows({ selected: true }).nodes().to$().each(function(index, element) {
         selectedGUIDs.push(element.dataset.guid);
       });
@@ -910,7 +1051,7 @@ function getSelections(source) {
   let selections = [];
   // If it's a PDF source, we look for both PDF and PlainText selections to merge them
   if (source.nodeName === "PDFSource") {
-    const representation = source.querySelector("Representation");
+    const representation = source.getElementsByTagName("Representation")[0];
     const plainTextSelections = new Map();
 
     // Map PlainTextSelections by their GUID from the Representation, if it exists
@@ -955,9 +1096,12 @@ function getCodeRelatedGUIDs(selection) {
   let codings = selection.getElementsByTagName("Coding");
   if (codings != null) {
     for (let coding of codings) {
-      let codeId = coding.getElementsByTagName("CodeRef")[0].getAttribute("targetGUID");
-      let userId = coding.getAttribute('creatingUser');
-      codeGUIDs = codeGUIDs + codeId + userId;
+      let codeRefs = coding.getElementsByTagName("CodeRef");
+      for (let codeRef of codeRefs) {
+        let codeId = codeRef.getAttribute("targetGUID");
+        let userId = coding.getAttribute('creatingUser');
+        codeGUIDs = codeGUIDs + codeId + userId;
+      }
     }
   }
   return codeGUIDs;
@@ -968,10 +1112,13 @@ function getCodeNames(selection) {
   let codings = selection.getElementsByTagName("Coding");
   if (codings != null) {
     for (let coding of codings) {
-      let codeId = coding.getElementsByTagName("CodeRef")[0].getAttribute("targetGUID");
-      let code = codeMap.get(codeId);
-      if (code != null) {
-        codeNameList.push(code.getAttribute("name"));
+      let codeRefs = coding.getElementsByTagName("CodeRef");
+      for (let codeRef of codeRefs) {
+        let codeId = codeRef.getAttribute("targetGUID");
+        let code = codeMap.get(codeId);
+        if (code != null) {
+          codeNameList.push(code.getAttribute("name"));
+        }
       }
     }
   }
@@ -981,15 +1128,13 @@ function getCodeNames(selection) {
 // Update the createSelectionWithTooltip function to use a simpler data structure
 function createSelectionWithTooltip(selectionName, startPos, endPos, plainTextPath, sourceGuid) {
     // Create a span with data attributes that we'll use for the tooltip
-    let spanHtml = '<span class="selection-with-excerpt" ' +
+    return '<span class="selection-with-excerpt" ' +
         'data-start="' + startPos + '" ' +
         'data-end="' + endPos + '" ' +
         'data-path="' + plainTextPath + '" ' +
         'data-source-guid="' + sourceGuid + '">' +
         selectionName +
         '</span>';
-    
-    return spanHtml;
 }
 
 function createMergedSelectionWithTooltip(selectionName, pdfSel, plainTextSel, sourceGuid) {
@@ -1044,27 +1189,91 @@ function createPdfSelectionWithTooltip(selectionName, page, firstX, firstY, seco
     return spanHtml;
 }
 
-function createSourceReference(source) {
-    let sourceName = source.getAttribute("name");
-    let plainTextPath = source.getAttribute("plainTextPath");
-    
-    if (isZipMode()) {
-        // In zip mode, create a link that uses the zip entry
-        if (typeof entryMap !== 'undefined' && plainTextPath && entryMap[plainTextPath] !== undefined) {
-            let entryIndex = entryMap[plainTextPath];
-            return '<a href="#" data-entry-index="' + entryIndex + '">' + sourceName + '</a>';
-        } else {
-            // No link if file not found in zip
-            return sourceName;
-        }
-    } else {
-        // In non-zip mode, create a direct link to the file if it exists
-        if (plainTextPath) {
-            return '<a href="' + plainTextPath + '" target="_blank">' + sourceName + '</a>';
-        } else {
-            return sourceName;
+function createSourceReference(sourceElement) {
+    const sourceName = sourceElement.getAttribute("name");
+    const sourceGuid = sourceElement.getAttribute("guid");
+    const path = sourceElement.getAttribute("path");
+    const plainTextPath = sourceElement.getAttribute("plainTextPath");
+    const richTextPath = sourceElement.getAttribute("richTextPath");
+
+    const referenceDiv = document.createElement('div');
+    referenceDiv.className = 'source-reference';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = `${sourceName} (`;
+    referenceDiv.appendChild(nameSpan);
+
+    const links = [];
+
+    // Handle binary files (like PDFs) that have a 'path'
+    if (path) {
+        const pdfLink = document.createElement('a');
+        pdfLink.href = '#';
+        pdfLink.textContent = 'PDF';
+        pdfLink.title = 'Download PDF';
+        pdfLink.onclick = (e) => {
+            e.preventDefault();
+            downloadSourceFile(sourceGuid, path);
+        };
+        links.push(pdfLink);
+
+        // Check for a plain text representation of the binary file
+        const representation = sourceElement.querySelector('Representation[plainTextPath]');
+        if (representation) {
+            const textRepresentationPath = representation.getAttribute('plainTextPath');
+            const textLink = document.createElement('a');
+            textLink.href = '#';
+            textLink.textContent = 'TXT';
+            textLink.title='Download Text';
+            textLink.onclick = (e) => {
+                e.preventDefault();
+                downloadSourceFile(sourceGuid, textRepresentationPath);
+            };
+            links.push(textLink);
         }
     }
+    // Handle plain text files that only have a 'plainTextPath'
+    else if (plainTextPath) {
+        const textLink = document.createElement('a');
+        textLink.href = '#';
+        textLink.textContent = 'TXT';
+        textLink.title = 'Download Text';
+        textLink.onclick = (e) => {
+            e.preventDefault();
+            downloadSourceFile(sourceGuid, plainTextPath);
+        };
+        links.push(textLink);
+    }
+
+    // Handle rich text files (like DOCX) that have a 'richTextPath'
+    if (richTextPath) {
+        const richTextLink = document.createElement('a');
+        richTextLink.href = '#';
+        const extension = richTextPath.split('.').pop().toUpperCase();
+        richTextLink.textContent = extension;
+        richTextLink.title = 'Download Rich Text';
+        richTextLink.onclick = (e) => {
+            e.preventDefault();
+            downloadSourceFile(sourceGuid, richTextPath);
+        };
+        links.push(richTextLink);
+    }
+
+    // Append all created links with separators
+    links.forEach((link, index) => {
+        referenceDiv.appendChild(link);
+        if (index < links.length - 1) {
+            const separator = document.createElement('span');
+            separator.textContent = ' | ';
+            referenceDiv.appendChild(separator);
+        }
+    });
+
+    const closingParen = document.createElement('span');
+    closingParen.textContent = ')';
+    referenceDiv.appendChild(closingParen);
+
+    return referenceDiv;
 }
 
 function formatExcerptTooltip(excerpt, startPos, endPos) {
@@ -1088,7 +1297,7 @@ function formatExcerptTooltip(excerpt, startPos, endPos) {
     return `
         <div style="padding: 8px; font-family: sans-serif;">
             <div style="font-weight: bold; margin-bottom: 6px; font-size: 11px; color: #999; border-bottom: 1px solid #ddd; padding-bottom: 4px;">
-                Text Excerpt (Position ${startPos}-${endPos})
+                ${$.i18n('refiqdaExcerptTooltipHeader', startPos, endPos)}
             </div>
             <div style="font-size: 13px; line-height: 1.5; max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;">
                 "${displayExcerpt}"
@@ -1180,15 +1389,19 @@ async function loadTextExcerpt(plainTextPath, startPos, endPos, sourceGuid) {
 
         // For zip mode, use the fetchTextExcerpt function from refiqdpx.js
         if (isZipMode() && typeof fetchTextExcerpt === 'function') {
-            // fetchTextExcerpt already handles the substring extraction
-            let bagPath = plainTextPath.replace("internal://","sources/");
-            const excerpt = await fetchTextExcerpt(bagPath, startPos, endPos);
-            
-            // Note: We're not caching here because fetchTextExcerpt is efficient
-            // and only fetches the bytes we need. If you want to cache full files
-            // for multiple excerpts from the same file, you'd need to modify
-            // fetchTextExcerpt to optionally return the full text
-            return excerpt;
+            const finalPath = typeof resolveInternalZipPaths === 'function' ? resolveInternalZipPaths(plainTextPath) : plainTextPath.replace("internal://", "sources/");
+            if (finalPath) {
+                try {
+                    // Note: We're not caching here because fetchTextExcerpt is efficient
+                    // and only fetches the bytes we need. If you want to cache full files
+                    // for multiple excerpts from the same file, you'd need to modify
+                    // fetchTextExcerpt to optionally return the full text
+                    return await fetchTextExcerpt(finalPath, startPos, endPos);
+                } catch (e) {
+                    console.debug(`File not found at ${finalPath}`);
+                }
+            }
+            return null;
         } else {
             // Fallback for non-zip mode (direct file access)
             const response = await fetch(plainTextPath);
@@ -1207,5 +1420,232 @@ async function loadTextExcerpt(plainTextPath, startPos, endPos, sourceGuid) {
     } catch (error) {
         console.error('Error loading text excerpt:', error);
         return null;
+    }
+}
+
+function removeSourcesFromXml(targetXmlDoc, guidsToRedact) {
+  for (const guid of guidsToRedact) {
+    // Find any source element by its GUID and remove it.
+    // This will also remove all its children, including annotations.
+    let sourceElement = targetXmlDoc.querySelector('[guid="' + guid + '"]');
+    if (sourceElement && sourceElement.parentNode) {
+      sourceElement.parentNode.removeChild(sourceElement);
+      console.log("Removed source element and its annotations with GUID:", guid);
+    }
+  }
+}
+
+function removeCodesFromXml(targetXmlDoc, guidsToRedact) {
+  for (const guid of guidsToRedact) {
+    // 1. Find and remove the Code element
+    let codeElement = targetXmlDoc.querySelector('Code[guid="' + guid + '"]');
+    if (codeElement && codeElement.parentNode) {
+      codeElement.parentNode.removeChild(codeElement);
+      console.log("Removed code element with GUID:", guid);
+    }
+
+    // 2. Find and remove all CodeRef elements pointing to this code
+    let codeRefs = targetXmlDoc.querySelectorAll('CodeRef[targetGUID="' + guid + '"]');
+    codeRefs.forEach(codeRef => {
+      let coding = codeRef.parentNode;
+      if (!coding) return;
+
+      // Find the parent annotation
+      let annotation = coding.parentNode;
+      while (annotation && annotation.nodeName !== 'Annotation') {
+          annotation = annotation.parentNode;
+      }
+
+      // 1. Remove the CodeRef
+      coding.removeChild(codeRef);
+
+      // 2. If the Coding element now has no more CodeRefs, remove it
+      let selection = coding.parentNode;
+      if (selection && coding.getElementsByTagName("CodeRef").length === 0) {
+        selection.removeChild(coding);
+
+        // 3. If the selection (parent of Coding) now has no more Codings, remove it
+        if (selection.nodeName.endsWith("Selection") && selection.getElementsByTagName("Coding").length === 0 && selection.parentNode) {
+            selection.parentNode.removeChild(selection);
+            console.log("Removed empty selection.");
+        }
+      }
+
+      // 3. Remove any annotations that only used that code (now have no CodeRefs)
+      if (annotation && annotation.parentNode) {
+        let remainingCodeRefs = annotation.querySelectorAll('CodeRef');
+        if (remainingCodeRefs.length === 0) {
+          annotation.parentNode.removeChild(annotation);
+          console.log("Removed annotation that has no remaining codes.");
+        }
+      }
+    });
+  }
+}
+
+/**
+ * Uploads a redacted file (either a codebook XML or a project ZIP) to Dataverse.
+ *
+ * @param {Blob} blob The redacted file blob.
+ * @param {string} filename The name of the file to be uploaded.
+ */
+async function uploadRedactedFile(blob, filename) {
+  try {
+    const formData = new FormData();
+    formData.append("file", blob, filename);
+    formData.append("origin", "qdas");
+    formData.append("isPublic", "true");
+    formData.append("type", "qda");
+
+    console.log(`Uploading redacted file: ${filename}`);
+    let uploadUrl = queryParams.signedUrls ? queryParams.signedUrls.uploadRedactedFile : null;
+    if (!uploadUrl && queryParams.siteUrl && queryParams.fileid) {
+        const type = isZipMode() ? 'qdpx' : 'qdc';
+        uploadUrl = queryParams.siteUrl + "/api/access/datafile/" + queryParams.fileid + "/auxiliary/" + type + "/1.0";
+        if (queryParams.key) {
+            uploadUrl += (uploadUrl.includes('?') ? '&' : '?') + "key=" + queryParams.key;
+        }
+    }
+
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Upload failed: ${response.statusText} - ${errorText}`);
+    }
+
+    const responseData = await response.json();
+    console.log("Upload successful:", responseData);
+    hideWaitingIndicator();
+    alert($.i18n('refiqdaRedactSuccess'));
+    checkForRedactedFile();
+  } catch (error) {
+    console.error("Error during upload:", error);
+    hideWaitingIndicator();
+    alert($.i18n('refiqdaRedactError', error.message));
+  }
+}
+
+function redactSources(guidsToRedact) {
+  showWaitingIndicator('refiqdaRedactingProject');
+  console.log("Redacting sources with GUIDs:", guidsToRedact);
+
+  let redactedXmlDoc = xmlDoc.cloneNode(true);
+  removeSourcesFromXml(redactedXmlDoc, guidsToRedact);
+
+  const redactedXmlString = new XMLSerializer().serializeToString(redactedXmlDoc);
+
+  if (isZipMode() && typeof zip !== 'undefined') {
+    // Find the paths of the source files to remove from the zip archive.
+    const pathsToRemove = new Set();
+    for (const guid of guidsToRedact) {
+      const sourceElement = xmlDoc.querySelector(`[guid="${guid}"]`);
+      if (sourceElement) {
+        // Check various path attributes
+        ["path", "plainTextPath", "richTextPath"].forEach(attr => {
+          const val = sourceElement.getAttribute(attr);
+          if (val) {
+            const p = typeof resolveInternalZipPaths === 'function' ? resolveInternalZipPaths(val) : val.replace("internal://", "sources/");
+            if (p) pathsToRemove.add(p);
+          }
+        });
+
+        // Check for paths in Representations
+        const representations = sourceElement.querySelectorAll('Representation');
+        representations.forEach(rep => {
+          const ptp = rep.getAttribute("plainTextPath");
+          if (ptp) {
+            const p = typeof resolveInternalZipPaths === 'function' ? resolveInternalZipPaths(ptp) : ptp.replace("internal://", "sources/");
+            if (p) pathsToRemove.add(p);
+          }
+        });
+      }
+    }
+    createAndUploadRedactedZip(redactedXmlString, pathsToRemove);
+  } else {
+    // Fallback for non-zip mode (single XML file)
+    const redactedXmlBlob = new Blob([redactedXmlString], { type: 'text/x-xml-refiqda' });
+    const originalFilename = file.filename || "project.qdc";
+    const redactedFilename = originalFilename.replace(/(\.qdc)?$/, '-redacted.qdc');
+    uploadRedactedFile(redactedXmlBlob, redactedFilename);
+  }
+}
+
+function redactCodes(guidsToRedact) {
+  showWaitingIndicator('refiqdaRedactingProject');
+  console.log("Redacting codes with GUIDs:", guidsToRedact);
+
+  let redactedXmlDoc = xmlDoc.cloneNode(true);
+  removeCodesFromXml(redactedXmlDoc, guidsToRedact);
+
+  const redactedXmlString = new XMLSerializer().serializeToString(redactedXmlDoc);
+
+  if (isZipMode() && typeof zip !== 'undefined') {
+    createAndUploadRedactedZip(redactedXmlString);
+  } else {
+    // Fallback for non-zip mode (single XML file)
+    const redactedXmlBlob = new Blob([redactedXmlString], { type: 'text/x-xml-refiqda' });
+    const originalFilename = file.filename || "project.qdc";
+    const redactedFilename = originalFilename.replace(/(\.qdc)?$/, '-redacted.qdc');
+    uploadRedactedFile(redactedXmlBlob, redactedFilename);
+  }
+}
+
+async function checkForRedactedFile() {
+    let listUrl = queryParams.signedUrls ? queryParams.signedUrls.listAuxiliaryFiles : null;
+    if (!listUrl && queryParams.siteUrl && queryParams.fileid) {
+        listUrl = queryParams.siteUrl + "/api/access/datafile/" + queryParams.fileid + "/auxiliary";
+        if (queryParams.key) {
+            listUrl += (listUrl.includes('?') ? '&' : '?') + "key=" + queryParams.key;
+        }
+    }
+    if (listUrl) {
+        try {
+            const response = await fetch(listUrl);
+            if (response.ok) {
+                const auxFiles = await response.json();
+                const type = isZipMode() ? 'qdpx' : 'qdc';
+                redactedFileExists = auxFiles.data.some(f => f.formatTag === type && f.formatVersion === '1.0');
+                if (redactedFileExists) {
+                    $('.delete-redacted-btn').show();
+                } else {
+                    $('.delete-redacted-btn').hide();
+                }
+            }
+        } catch (error) {
+            console.error("Error checking for redacted file:", error);
+        }
+    }
+}
+
+async function deleteRedactedFile() {
+    if (confirm($.i18n('refiqdaDeleteConfirm'))) {
+        try {
+            let deleteUrl = queryParams.signedUrls ? queryParams.signedUrls.deleteRedactedFile : null;
+            if (!deleteUrl && queryParams.siteUrl && queryParams.fileid) {
+                const type = isZipMode() ? 'qdpx' : 'qdc';
+                deleteUrl = queryParams.siteUrl + "/api/access/datafile/" + queryParams.fileid + "/auxiliary/" + type + "/1.0";
+                if (queryParams.key) {
+                    deleteUrl += (deleteUrl.includes('?') ? '&' : '?') + "key=" + queryParams.key;
+                }
+            }
+            const response = await fetch(deleteUrl, {
+                method: 'DELETE'
+            });
+            if (response.ok) {
+                alert($.i18n('refiqdaDeleteSuccess'));
+                redactedFileExists = false;
+                $('.delete-redacted-btn').hide();
+            } else {
+                const errorText = await response.text();
+                throw new Error(`Delete failed: ${response.statusText} - ${errorText}`);
+            }
+        } catch (error) {
+            console.error("Error deleting redacted file:", error);
+            alert($.i18n('refiqdaDeleteError', error.message));
+        }
     }
 }

@@ -6,72 +6,113 @@ $(document).ready(function() {
 var map = L.map('map').fitWorld();
 
 function translateBaseHtmlPage() {
-    var mapPreviewText = $.i18n( "mapPreviewText" );
-    $( '.mapPreviewText' ).text( mapPreviewText );
+    $('.mapPreviewText').text($.i18n("mapPreviewText"));
 }
 
 // set limits
-const file_size_limit = 20; // in MB
+const fileSizeLimit = 50; // MB
 
 // enable spinner
 var target = document.getElementById('map');
 var spinner = new Spinner().spin(target);
 
-function writeContent(fileUrl, file, title, authors) {
-    addStandardPreviewHeader(file, title, authors);
 
-    //check file size
-    const url_to_file_info = fileUrl.replace("access/data","").replace("file","files");
+async function loadMetadata(metadataUrl) {
+    const response = await fetch(metadataUrl);
 
-    $.getJSON(url_to_file_info, function( data ) {
-        const file_size = data.data.dataFile.filesize/(1024**2);
+    if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status}`);
+    }
 
-        if (file_size > file_size_limit){
-            show_error(`The file is too big to be displayed (limit is ${file_size_limit.toString()} MB)`);
-        }else{
-            // load a tile layer
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
-
-            // get data
-            var request = new XMLHttpRequest();
-            request.open('GET', fileUrl, true);
-            request.responseType = 'blob';
-            request.onload = function() {
-                var reader = new FileReader();
-                reader.readAsArrayBuffer(request.response);
-                reader.onload =  function(e){
-                    convertToLayer(e.target.result);        
-                };
-            };
-            request.send();
-        }
-    });
-} 
-
-function convertToLayer(buffer){
-    shp(buffer).then(function(shapeData){	//More info: https://github.com/calvinmetcalf/shapefile-js
-        var shape = L.shapefile(shapeData, {
-        	onEachFeature: function (feature, layer) {
-        	    if (feature.properties) {
-        	        var popupcontent = [];
-        	        for (var propName in feature.properties) {
-        	            propValue = feature.properties[propName];
-        	            popupcontent.push("<strong>" + propName + "</strong>: " + JSON.stringify(propValue, null, 2));
-        	        }
-        	        layer.bindPopup(popupcontent.join("<br />"));
-        	    }
-        	}
-        }).addTo(map);  //More info: https://github.com/calvinmetcalf/leaflet.shapefile
-        map.fitBounds(shape.getBounds()); 
-        // disable spinner
-        spinner.stop();      
-    });
+    return await response.json();
 }
 
-function show_error(error_text){
-	$('#map').hide();
-	$('#file_error').show();
-	$('#file_error').append(error_text);
+
+async function getFileSize() {
+
+    const fileid = queryParams.fileid;
+    const datasetMetadataUrl = queryParams.versionUrl;
+
+    const metadata = await loadMetadata(datasetMetadataUrl);
+
+    const filesMetadata = metadata.data.files;
+
+    const fileMetadata = filesMetadata.find(f => f.dataFile.id === fileid);
+
+    const fileName = fileMetadata.dataFile.filename;
+    const fileSize = Math.round(fileMetadata.dataFile.filesize / (1024 ** 2));
+
+    //console.log(fileName, fileSize);
+
+    return fileSize;
+}
+
+
+async function writeContent(fileUrl, file, title, authors) {
+
+    addStandardPreviewHeader(file, title, authors);
+
+    const fileSize = await getFileSize();
+
+    if (fileSize > fileSizeLimit) {
+        show_error(`The file is too big to be displayed (limit is ${fileSizeLimit} MB)`);
+        spinner.stop();
+        return;
+    }
+
+
+    // load OpenStreetMap tiles
+    L.tileLayer(
+        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {
+            attribution:
+                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }
+    ).addTo(map);
+
+
+    try {
+        const buffer = await (
+            await fetch(fileUrl)
+        ).arrayBuffer();
+
+        await convertToLayer(buffer);
+
+    } catch (error) {
+        console.error(error);
+        show_error("Unable to display shapefile.");
+    } finally {
+        spinner.stop();
+    }
+}
+
+
+async function convertToLayer(buffer) {
+
+    // shapefile -> GeoJSON
+    const shapeData = await shp(buffer);
+
+    // GeoJSON -> Leaflet layer
+    const shape = L.geoJSON(shapeData, {
+
+        onEachFeature(feature, layer) {
+            if (!feature.properties) {return;}
+
+            const popupContent = Object.entries(feature.properties)
+                .map(([key, value]) => `<strong>${key}</strong>: ${JSON.stringify(value)}`)
+                .join("<br>");
+
+            layer.bindPopup(popupContent);
+        }
+
+    }).addTo(map);
+
+    map.fitBounds(shape.getBounds());
+}
+    
+
+function show_error(error_text) {
+    $('#map').hide();
+    $('#file_error').show();
+    $('#file_error').append(error_text);
 }

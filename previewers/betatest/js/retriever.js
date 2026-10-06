@@ -38,6 +38,7 @@ function startPreview(retrieveFile) {
                             queryParams.preview = params.get('preview');
                         }
                         var urls = json.data.signedUrls;
+                        queryParams.signedUrls = {};
                         for (var i in urls) {
                             var url = urls[i];
                             switch (url.name) {
@@ -51,6 +52,7 @@ function startPreview(retrieveFile) {
                                     queryParams.versionUrl = url.signedUrl;
                                     break;
                                 default:
+                                    queryParams.signedUrls[url.name] = url.signedUrl;
                             }
                         }
                         continuePreview(retrieveFile, queryParams);
