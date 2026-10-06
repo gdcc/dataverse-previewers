@@ -72,7 +72,7 @@ if [ ! -z "$2" ]; then
 cd "${dirLocal}"
 echo Changing example curl commands to use local URLs
 localurl="$2"
-sed -i "s,https://gdcc.github.io/dataverse-previewers/previewers/v1.[34],$localurl/$folder,g" *curlcommands.md
+sed -i "s,https://gdcc.github.io/dataverse-previewers/previewers/[^/]*,$localurl,g" *curlcommands.md
 echo Done changing example curl commands to use local URLs
 cd "${folder}"
 fi
