@@ -82,7 +82,7 @@ The Spreadsheet Previewer was contributed by [anncie-pcss](https://github.com/an
 
 [kaitlinnewson](https://github.com/kaitlinnewson) provided a French translation for the existing previewers, and contributed the GeoJSON previewer.
 
-[Max Planck Digital Library](https://github.com/MPDL) contributed the ZIP Previewer.
+[Max Planck Digital Library](https://github.com/MPDL) contributed the ZIP previewer and the 7zip previewer.
 
 [erykkul](https://github.com/erykkul) contributed the Markdown (MD) Previewer, the RO-Crate previewer, and the CDI (DDI Cross-Domain Integration) previewer. The CDI previewer displays all JSON-LD data nodes and properties with real-time SHACL validation, smart property classification (required/optional/extra fields), support for complex nested objects, and editing capabilities. See [https://github.com/libis/cdi-viewer](https://github.com/libis/cdi-viewer) for the source code, documentation and implementation details.
 

@@ -13,6 +13,7 @@ $(document).ready(function () {
 window.translateBaseHtmlPage = function translateBaseHtmlPage() {
     var sevenZipPreviewText = $.i18n("sevenZipPreviewText");
     $(".sevenZipPreviewText").text(sevenZipPreviewText);
+    $(".sevenZipPreviewInfoText").html($.i18n("sevenZipPreviewInfoText"));
 };
 
 window.writeContent = async function writeContent(fileUrl, file, title, authors) {

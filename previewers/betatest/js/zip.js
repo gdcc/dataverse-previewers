@@ -4,8 +4,9 @@ $(document).ready(function () {
 });
 
 function translateBaseHtmlPage() {
-    var zipViewerText = $.i18n("zipViewerText");
-    $('.zipViewerText').text(zipViewerText);
+    var zipPreviewText = $.i18n("zipPreviewText");
+    $('.zipPreviewText').text(zipPreviewText);
+    $('.zipDownloadCompleteText').html($.i18n("zipDownloadCompleteText"));
 }
 
 async function writeContent(fileUrl, file, title, authors) {
@@ -18,6 +19,7 @@ async function writeContent(fileUrl, file, title, authors) {
 
 const MAX_ENTRIES_EXPANDED = 2000;
 let entries;
+let isSplitArchive = false;
 
 async function readZip(fileUrl) {
 
@@ -28,7 +30,9 @@ async function readZip(fileUrl) {
         }
 
 
-        const reader = new zip.ZipReader(new zip.HttpRangeReader(fileUrl));
+        const rangeReader = new zip.HttpRangeReader(fileUrl);
+        isSplitArchive = await isSplitZip(rangeReader);
+        const reader = new zip.ZipReader(rangeReader);
 
         // get all entries from the zip
         entries = await reader.getEntries();
@@ -40,7 +44,7 @@ async function readZip(fileUrl) {
             entries.forEach(function(entry, index) {
 
                 const treeObject = {};
-
+                
                 let filename = entry.filename;
                 //remove slash at end of string if available
                 if (filename.endsWith('/')) {
@@ -80,9 +84,9 @@ async function readZip(fileUrl) {
 
                     entryMap[entry.filename] = treeObject;
                 }
-
-
-
+                
+             
+                
 
                 if(parentListNode) {
                     if(!parentListNode.children){
@@ -99,9 +103,13 @@ async function readZip(fileUrl) {
             // close the ZipReader
             await reader.close();
 
+            if (isSplitArchive) {
+                showSplitWarning();
+            }
+
             createTree(entryList);
 
-
+         
         }
     }
     catch (err) {
@@ -124,6 +132,33 @@ async function readZip(fileUrl) {
 
 }
 
+
+async function isSplitZip(reader) {
+    const EOCD_SIGNATURE = 0x06054b50;
+    const EOCD_LENGTH = 22;
+    const MAX_COMMENT_LENGTH = 0xFFFF;
+    const scanLength = Math.min(reader.size, EOCD_LENGTH + MAX_COMMENT_LENGTH);
+    const data = await reader.readUint8Array(reader.size - scanLength, scanLength);
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    for (let i = data.length - EOCD_LENGTH; i >= 0; i--) {
+        if (view.getUint32(i, true) === EOCD_SIGNATURE) {
+            const commentLength = view.getUint16(i + 20, true);
+            if (i + EOCD_LENGTH + commentLength === data.length) {
+                const diskNumber = view.getUint16(i + 4, true);
+                return diskNumber > 0;
+            }
+        }
+    }
+    return false;
+}
+
+function showSplitWarning() {
+    const warning = document.createElement('div');
+    warning.className = 'alert alert-warning';
+    warning.innerHTML = $.i18n("zipSplitWarning");
+    const preview = document.getElementById('zip-preview');
+    preview.parentNode.insertBefore(warning, preview);
+}
 
 function fileSizeSI(a, b, c, d, e) {
     return (b = Math, c = b.log, d = 1000, e = c(a) / c(d) | 0, a / b.pow(d, e)).toFixed(2)
@@ -149,7 +184,7 @@ async function downloadFile(event) {
 
 async function download(entry, li, a) {
     if (!li.classList.contains("busy")) {
-
+        
         $('#modalTextContent').text(entry.filename);
         const controller = new AbortController();
         const signal = controller.signal;
@@ -160,11 +195,11 @@ async function download(entry, li, a) {
         try {
             const blobURL = URL.createObjectURL(await entry.getData(new zip.BlobWriter(), {
                 onprogress: (index, max) => {
-
+                    
                     const percent = Math.round(index/max*100);
                     console.log(index + "   " + max  + "   " + percent);
                     setProgressBarValue(percent);
-
+                    
                 },
                 signal
             }))
@@ -205,7 +240,7 @@ async function createTree(dataStructure) {
           nodeColumnIdx: 0,     // render the node title into the 1st column
         },
         source: dataStructure,
-
+        
 
         tooltip: function(event, data){
           return data.node.data.filename;
@@ -217,32 +252,32 @@ async function createTree(dataStructure) {
         beforeActivate: function(event, data){
             //Prevent activation for every node
             return false;
-
+            
           },
-
-
+    
+    
         renderColumns: function(event, data) {
-
+          
             var node = data.node,
             $tdList = $(node.tr).find(">td");
-
+            
             // (index #0 is rendered by fancytree by adding the title)
             if(!node.folder) {
                 $tdList.eq(1).text(node.data.size);
 
-                if(!node.data.encrypted) {
+                if(!node.data.encrypted && !isSplitArchive) {
                 const downloadLink = $('<a href="#" data-entry-index="' + node.data.index + '">');
                 downloadLink.click(downloadFile);
                 downloadLink.append('<span class="icon glyphicon glyphicon-download-alt"></span>');
-
+                
                 $tdList.eq(2).html(downloadLink);
                 }
             }
 
         }
       });
-
-
+    
+    
 
 } 
 

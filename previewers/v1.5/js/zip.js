@@ -4,8 +4,9 @@ $(document).ready(function () {
 });
 
 function translateBaseHtmlPage() {
-    var zipViewerText = $.i18n("zipViewerText");
-    $('.zipViewerText').text(zipViewerText);
+    var zipPreviewText = $.i18n("zipPreviewText");
+    $('.zipPreviewText').text(zipPreviewText);
+    $('.zipDownloadCompleteText').html($.i18n("zipDownloadCompleteText"));
 }
 
 async function writeContent(fileUrl, file, title, authors) {
