@@ -138,16 +138,23 @@ async function isSplitZip(reader) {
     const EOCD_SIGNATURE = 0x06054b50;
     const EOCD_LENGTH = 22;
     const MAX_COMMENT_LENGTH = 0xFFFF;
-    const scanLength = Math.min(reader.size, EOCD_LENGTH + MAX_COMMENT_LENGTH);
-    const data = await reader.readUint8Array(reader.size - scanLength, scanLength);
-    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-    for (let i = data.length - EOCD_LENGTH; i >= 0; i--) {
-        if (view.getUint32(i, true) === EOCD_SIGNATURE) {
-            const commentLength = view.getUint16(i + 20, true);
-            if (i + EOCD_LENGTH + commentLength === data.length) {
-                const diskNumber = view.getUint16(i + 4, true);
-                return diskNumber > 0;
+
+    // Most zips have no comment, so the EOCD is exactly the last 22 bytes; only scan further if not
+    for (const maxScan of [EOCD_LENGTH, EOCD_LENGTH + MAX_COMMENT_LENGTH]) {
+        const scanLength = Math.min(reader.size, maxScan);
+        const data = await reader.readUint8Array(reader.size - scanLength, scanLength);
+        const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+        for (let i = data.length - EOCD_LENGTH; i >= 0; i--) {
+            if (view.getUint32(i, true) === EOCD_SIGNATURE) {
+                const commentLength = view.getUint16(i + 20, true);
+                if (i + EOCD_LENGTH + commentLength === data.length) {
+                    const diskNumber = view.getUint16(i + 4, true);
+                    return diskNumber > 0;
+                }
             }
+        }
+        if (scanLength === reader.size) {
+            break;
         }
     }
     return false;
