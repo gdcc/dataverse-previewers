@@ -31,6 +31,7 @@ async function readZip(fileUrl) {
 
 
         const rangeReader = new zip.HttpRangeReader(fileUrl);
+        await rangeReader.init();
         isSplitArchive = await isSplitZip(rangeReader);
         const reader = new zip.ZipReader(rangeReader);
 
