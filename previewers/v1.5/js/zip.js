@@ -164,8 +164,8 @@ function showSplitWarning() {
     const warning = document.createElement('div');
     warning.className = 'alert alert-warning';
     warning.innerHTML = $.i18n("zipSplitWarning");
-    const preview = document.getElementById('zip-preview');
-    preview.parentNode.insertBefore(warning, preview);
+    const downloadText = document.querySelector('.zipDownloadCompleteText');
+    downloadText.parentNode.insertBefore(warning, downloadText);
 }
 
 function fileSizeSI(a, b, c, d, e) {
