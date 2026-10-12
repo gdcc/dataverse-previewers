@@ -19,7 +19,7 @@
   "textPreviewText": "Aperçu texte",
   "videoPreviewText": "Aperçu vidéo",
   "zipPreviewText": "Aperçu ZIP",
-  "zipSplitWarning": "Cette archive ZIP est divisée en plusieurs fichiers (.z01, .z02, ...). La structure peut être affichée, mais les fichiers individuels ne peuvent pas être téléchargés à partir de l'aperçu. Veuillez utiliser le bouton <b>Accéder au fichier</b> / <b>Télécharger le fichier</b> ci-dessus pour télécharger l'archive complète.",
+  "zipSplitWarning": "Cette archive ZIP est divisée en plusieurs fichiers (.z01, .z02, ...). La structure peut être affichée, mais les fichiers individuels ne peuvent pas être téléchargés à partir de l'aperçu.",
   "zipDownloadCompleteText": "Pour télécharger le fichier zip complet, veuillez utiliser le bouton <b>Accéder au fichier</b> / <b>Télécharger le fichier</b> ci-dessus.",
   "mdPreviewText": "Aperçu Markdown",
   "ncmlPreviewText": "Aperçu NcML",

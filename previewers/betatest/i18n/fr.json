@@ -19,7 +19,7 @@
   "textPreviewText": "Aperçu texte",
   "videoPreviewText": "Aperçu vidéo",
   "zipPreviewText": "Aperçu ZIP",
-  "zipSplitWarning": "Este archivo ZIP está dividido en varios archivos (.z01, .z02, ...). La estructura se puede mostrar, pero los archivos individuales no se pueden descargar desde la previsualización. Utilice el botón <b>Acceder al archivo</b> de arriba para descargar el archivo completo.",
+  "zipSplitWarning": "Cette archive ZIP est divisée en plusieurs fichiers (.z01, .z02, ...). La structure peut être affichée, mais les fichiers individuels ne peuvent pas être téléchargés à partir de l'aperçu.",
   "zipDownloadCompleteText": "Pour télécharger le fichier zip complet, veuillez utiliser le bouton <b>Accéder au fichier</b> / <b>Télécharger le fichier</b> ci-dessus.",
   "sevenZipPreviewText": "Aperçu 7zip",
   "sevenZipPreviewInfoText": "Cet aperçu affiche uniquement la structure de l'archive. Pour télécharger le fichier 7zip complet, veuillez utiliser le bouton <b>Accéder au fichier</b> / <b>Télécharger le fichier</b> ci-dessus.",
