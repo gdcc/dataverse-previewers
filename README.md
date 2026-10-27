@@ -123,7 +123,9 @@ By committing code to the repository, Contributors are agreeing to make it avail
 ## Example Curl commands to configure these tools with your Dataverse instance. 
 The examples configure Previewers from the specified location within https://github.io/gdcc/ corresponding to a given branch. To use older versions or locally installed versions of the previewers, you can change the "toolUrl" being used.
 
-Previewers v1.4 (with betatest versions of newer previewers as noted, e.g. 3D Previewer)
+Note that the `.md` files below can be easily converted into executable shell scripts, by stripping the MD formatting (such as ```` ``` ```` lines) and comments. It is recommended however that you read the comments first, since they specify additional configuration requirements for some of the tools. 
+
+Previewers v1.4+ (with betatest versions of newer previewers as noted, e.g. 3D Previewer)
 - [Dataverse 6.1+](6.1curlcommands.md) - using SignedUrls
 - [Dataverse 5.2+](5.2curlcommands.md) - using API tokens, not recommended beyond Dataverse 6.0
 
