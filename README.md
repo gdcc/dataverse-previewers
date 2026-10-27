@@ -49,6 +49,25 @@ By default, previewers reference several JavaScript libraries and style files fr
 
 and the script will download all external JavaScript and css files required by the previewers for the version you specified and will update the example configuration commands in the 6.1curlcommands.md, 5.2curlcommands.md and pre5.2curlcommands.md files to reference your local URL. In the case above, using the parameters previewers/v1.5 and https://example.com/path would result example curl commands where the TextPreview.html would be available at https://example.com/path/previewers/v1.5/TextPreview.html.
 
+Then make the directory previewers/v1.5 available via HTTP.
+For example, if this is a RedHat-like instance running Apache, and you ran the local install script as follows:
+
+```
+./localinstall.sh previewers/v1.5 https://dataverse.example.edu
+```
+copy the directory to a location served by Apache:
+```
+sudo mkdir /var/www/html/previewers
+sudo cp -ar previewers/v1.5 /var/www/html/previewers
+```
+If your instance is using a mostly standard Dataverse configuration, add the following exemption to your ```/etc/httpd/conf.d/ssl.conf```:
+
+```ProxyPassMatch ^/previewers !```
+
+following the other locations and services served under Apache that are exempt from being redirected to Payara, such as ```ProxyPassMatch ^/Shibboleth.sso !```
+
+Restart Apache for the changes to take effect. 
+
 ## How do they work?
 
 The tools here are lightweight wrappers around standard HTML5 functionality (e.g. audio, video), or third-party libraries (pdf, spreadsheets) or some combination (e.g. standard image displays with a third-party library to allow zooming, simple text/html displays with third-party libraries used to sanitize content to avoid security issues).
