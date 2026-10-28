@@ -4,9 +4,8 @@ $(document).ready(function () {
 });
 
 function translateBaseHtmlPage() {
-    var zipPreviewText = $.i18n("zipPreviewText");
-    $('.zipPreviewText').text(zipPreviewText);
-    $('.zipDownloadCompleteText').html($.i18n("zipDownloadCompleteText"));
+    var zipViewerText = $.i18n("zipViewerText");
+    $('.zipViewerText').text(zipViewerText);
 }
 
 async function writeContent(fileUrl, file, title, authors) {
@@ -19,7 +18,6 @@ async function writeContent(fileUrl, file, title, authors) {
 
 const MAX_ENTRIES_EXPANDED = 2000;
 let entries;
-let isSplitArchive = false;
 
 async function readZip(fileUrl) {
 
@@ -30,10 +28,7 @@ async function readZip(fileUrl) {
         }
 
 
-        const rangeReader = new zip.HttpRangeReader(fileUrl);
-        await rangeReader.init();
-        isSplitArchive = await isSplitZip(rangeReader);
-        const reader = new zip.ZipReader(rangeReader);
+        const reader = new zip.ZipReader(new zip.HttpRangeReader(fileUrl));
 
         // get all entries from the zip
         entries = await reader.getEntries();
@@ -104,10 +99,6 @@ async function readZip(fileUrl) {
             // close the ZipReader
             await reader.close();
 
-            if (isSplitArchive) {
-                showSplitWarning();
-            }
-
             createTree(entryList);
 
          
@@ -133,40 +124,6 @@ async function readZip(fileUrl) {
 
 }
 
-
-async function isSplitZip(reader) {
-    const EOCD_SIGNATURE = 0x06054b50;
-    const EOCD_LENGTH = 22;
-    const MAX_COMMENT_LENGTH = 0xFFFF;
-
-    // Most zips have no comment, so the EOCD is exactly the last 22 bytes; only scan further if not
-    for (const maxScan of [EOCD_LENGTH, EOCD_LENGTH + MAX_COMMENT_LENGTH]) {
-        const scanLength = Math.min(reader.size, maxScan);
-        const data = await reader.readUint8Array(reader.size - scanLength, scanLength);
-        const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-        for (let i = data.length - EOCD_LENGTH; i >= 0; i--) {
-            if (view.getUint32(i, true) === EOCD_SIGNATURE) {
-                const commentLength = view.getUint16(i + 20, true);
-                if (i + EOCD_LENGTH + commentLength === data.length) {
-                    const diskNumber = view.getUint16(i + 4, true);
-                    return diskNumber > 0;
-                }
-            }
-        }
-        if (scanLength === reader.size) {
-            break;
-        }
-    }
-    return false;
-}
-
-function showSplitWarning() {
-    const warning = document.createElement('div');
-    warning.className = 'alert alert-warning';
-    warning.innerHTML = $.i18n("zipSplitWarning");
-    const downloadText = document.querySelector('.zipDownloadCompleteText');
-    downloadText.parentNode.insertBefore(warning, downloadText);
-}
 
 function fileSizeSI(a, b, c, d, e) {
     return (b = Math, c = b.log, d = 1000, e = c(a) / c(d) | 0, a / b.pow(d, e)).toFixed(2)
@@ -273,7 +230,7 @@ async function createTree(dataStructure) {
             if(!node.folder) {
                 $tdList.eq(1).text(node.data.size);
 
-                if(!node.data.encrypted && !isSplitArchive) {
+                if(!node.data.encrypted) {
                 const downloadLink = $('<a href="#" data-entry-index="' + node.data.index + '">');
                 downloadLink.click(downloadFile);
                 downloadLink.append('<span class="icon glyphicon glyphicon-download-alt"></span>');

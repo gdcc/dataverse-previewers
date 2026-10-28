@@ -18,8 +18,6 @@
   "textPreviewText": "Previsualización de texto",
   "videoPreviewText": "Previsualización de vídeo",
   "zipPreviewText": "Previsualización de ZIP",
-  "zipSplitWarning": "Este archivo ZIP está dividido en varios archivos (.z01, .z02, ...). La estructura se puede mostrar, pero los archivos individuales no se pueden descargar desde la previsualización.",
-  "zipDownloadCompleteText": "Para descargar el archivo zip completo, utilice el botón <b>Acceder al archivo</b> / <b>Descargar fichero</b> de arriba.",
   "mdPreviewText": "Previsualización de Markdown",
   "ncmlPreviewText": "Previsualización de NcML",
   "rocratePreviewText": "Previsualización de RO-Crate",
