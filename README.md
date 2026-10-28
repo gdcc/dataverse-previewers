@@ -49,6 +49,25 @@ By default, previewers reference several JavaScript libraries and style files fr
 
 and the script will download all external JavaScript and css files required by the previewers for the version you specified and will update the example configuration commands in the 6.1curlcommands.md, 5.2curlcommands.md and pre5.2curlcommands.md files to reference your local URL. In the case above, using the parameters previewers/v1.5 and https://example.com/path would result example curl commands where the TextPreview.html would be available at https://example.com/path/previewers/v1.5/TextPreview.html.
 
+Then make the directory previewers/v1.5 available via HTTP.
+For example, if this is a RedHat-like instance running Apache, and you ran the local install script as follows:
+
+```
+./localinstall.sh previewers/v1.5 https://dataverse.example.edu
+```
+copy the directory to a location served by Apache:
+```
+sudo mkdir /var/www/html/previewers
+sudo cp -ar previewers/v1.5 /var/www/html/previewers
+```
+If your instance is using a mostly standard Dataverse configuration, add the following exemption to your ```/etc/httpd/conf.d/ssl.conf```:
+
+```ProxyPassMatch ^/previewers !```
+
+following the other locations and services served under Apache that are exempt from being redirected to Payara, such as ```ProxyPassMatch ^/Shibboleth.sso !```
+
+Restart Apache for the changes to take effect. 
+
 ## How do they work?
 
 The tools here are lightweight wrappers around standard HTML5 functionality (e.g. audio, video), or third-party libraries (pdf, spreadsheets) or some combination (e.g. standard image displays with a third-party library to allow zooming, simple text/html displays with third-party libraries used to sanitize content to avoid security issues).
@@ -82,7 +101,7 @@ The Spreadsheet Previewer was contributed by [anncie-pcss](https://github.com/an
 
 [kaitlinnewson](https://github.com/kaitlinnewson) provided a French translation for the existing previewers, and contributed the GeoJSON previewer.
 
-[Max Planck Digital Library](https://github.com/MPDL) contributed the ZIP Previewer.
+[Max Planck Digital Library](https://github.com/MPDL) contributed the ZIP previewer and the 7zip previewer.
 
 [erykkul](https://github.com/erykkul) contributed the Markdown (MD) Previewer, the RO-Crate previewer, and the CDI (DDI Cross-Domain Integration) previewer. The CDI previewer displays all JSON-LD data nodes and properties with real-time SHACL validation, smart property classification (required/optional/extra fields), support for complex nested objects, and editing capabilities. See [https://github.com/libis/cdi-viewer](https://github.com/libis/cdi-viewer) for the source code, documentation and implementation details.
 
@@ -104,7 +123,9 @@ By committing code to the repository, Contributors are agreeing to make it avail
 ## Example Curl commands to configure these tools with your Dataverse instance. 
 The examples configure Previewers from the specified location within https://github.io/gdcc/ corresponding to a given branch. To use older versions or locally installed versions of the previewers, you can change the "toolUrl" being used.
 
-Previewers v1.4 (with betatest versions of newer previewers as noted, e.g. 3D Previewer)
+Note that the `.md` files below can be easily converted into executable shell scripts, by stripping the MD formatting (such as ```` ``` ```` lines) and comments. It is recommended however that you read the comments first, since they specify additional configuration requirements for some of the tools. 
+
+Previewers v1.4+ (with betatest versions of newer previewers as noted, e.g. 3D Previewer)
 - [Dataverse 6.1+](6.1curlcommands.md) - using SignedUrls
 - [Dataverse 5.2+](5.2curlcommands.md) - using API tokens, not recommended beyond Dataverse 6.0
 
